@@ -1,0 +1,20 @@
+
+
+#!/bin/bash
+#SBATCH --job-name=cont_est
+#SBATCH --output=cont.out
+#SBATCH --error=cont.err
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=10G
+#SBATCH --time=1:00:00
+
+module load samtools
+module load module load authentict/1.0.1-3.13.1
+
+cd /lisc/scratch/admixlab/ina/Starosele_mt/contamination/
+
+
+samtools view /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326868/326868_S43_R1_001-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_1_check -s 10000 -
+
+samtools view /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326869/326869_S44_R1_001-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_2_check -s 10000 -
