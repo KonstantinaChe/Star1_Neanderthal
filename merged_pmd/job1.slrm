@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH --job-name=pmd
+#SBATCH --output=merge.out
+#SBATCH --error=merge.err
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=50G
+#SBATCH --time=10:00:00
+
+module load samtools
+module load module load authentict/1.0.1-3.13.1
+
+
+cd /lisc/scratch/admixlab/ina/Starosele_mt/merged_pmd/
+
+#first fix the read groups so that they are the same and you can merge the bams
+
+samtools addreplacerg -r 'ID:Starosele\tSM:Starosele\tLB:Starosele\tPL:Illumina' -m overwrite_all -o STS1_1_PMD_thr3_fixed_rg.bam ../PMD/STS1_1_PMD_thr3.bam
+samtools addreplacerg -r 'ID:Starosele\tSM:Starosele\tLB:Starosele\tPL:Illumina' -m overwrite_all -o STS1_2_PMD_thr3_fixed_rg.bam ../PMD/STS1_2_PMD_thr3.bam
+
+#then the merge itself
+samtools merge -p -c -@ 8 -o - STS1_1_PMD_thr3_fixed_rg.bam STS1_2_PMD_thr3_fixed_rg.bam | samtools sort -@ 8 --write-index -o STS_merged.bam
+
+cd ../contamination/
+
+samtools view ../merged_pmd/STS_merged.bam | AuthentiCT deam2cont -o sts_merged_check -s 10000 -
