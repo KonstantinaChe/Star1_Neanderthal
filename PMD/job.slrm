@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --job-name=pmd
+#SBATCH --output=pmd.out
+#SBATCH --error=pmd.err
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=50G
+#SBATCH --time=10:00:00
+
+module load samtools
+module load module load authentict/1.0.1-3.13.1
+souce /lisc/user/cheshmedzhieva/myenv/bin/activate
+
+
+cd /lisc/scratch/admixlab/ina/Starosele_mt/PMD/
+
+samtools view -h /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326868/326868_S43_R1_001-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 3 --header | samtools view -Sb - > STS1_1_PMD_thr3.bam
+
+samtools view -h /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326869/326869_S44_R1_001-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 3 --header | samtools view -Sb - > STS1_2_PMD_thr3.bam
+
+cd ../contamination/
+
+samtools view ../PMD/STS1_1_PMD_thr3.bam | AuthentiCT deam2cont -o sts1_1_pmd_check -s 10000 -
+
+samtools view ../PMD/STS1_2_PMD_thr3.bam | AuthentiCT deam2cont -o sts1_2_pmd_check -s 10000 -
