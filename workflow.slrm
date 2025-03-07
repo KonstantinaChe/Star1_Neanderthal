@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --mail-user=konstantina.cheshmedzhieva@univie.ac.at
 #SBATCH --job-name=STS
-#SBATCH --output=log/%x-%A_%a.out
-#SBATCH --error=log/%x-%A_%a.err
+#SBATCH --output=log/workflow.out
+#SBATCH --error=log/workflow.err
 #SBATCH --mem=150GB
 #SBATCH --cpus-per-task=16
 #SBATCH --time=7-00:00:00
@@ -29,12 +29,12 @@ cd {directory}/
 
 # 1) Adapter trimming and read length filtering
 
-/lisc/user/cheshmedzhieva/leeHom/src/leeHom -f AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --ancientdna -fqo primary-trimmed -fq1 $FASTQ_DIR/$sampleid/{filename}.fastq.gz
+your_path/leeHom/src/leeHom -f AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --ancientdna -fqo primary-trimmed -fq1 $FASTQ_DIR/$sampleid/{filename}.fastq.gz
 
 seqtk seq -L 30 primary-trimmed.fq.gz | gzip > {filename}-trimmed.fq.gz
 
 # 2) Mapping Mitochondrial
-bwa aln -t 12 -l 16500 -n 0.01 -o 2 -q 0 /lisc/user/cheshmedzhieva/REF/rCRS.fa {filename}-trimmed.fq.gz | bwa samse -r '@RG\tID:{filename}-mt\tLB:{filename}-mt\tPL:Illumina\tPU:1\tSM:{filename}-mt' /lisc/user/cheshmedzhieva/REF/rCRS.fa - {filename}-trimmed.fq.gz \
+bwa aln -t 12 -l 16500 -n 0.01 -o 2 -q 0 your_path/rCRS.fa {filename}-trimmed.fq.gz | bwa samse -r '@RG\tID:{filename}-mt\tLB:{filename}-mt\tPL:Illumina\tPU:1\tSM:{filename}-mt' your_path/rCRS.fa - {filename}-trimmed.fq.gz \
 | samtools view -Sbh - > {filename}-mt-rg.bam
 module unload java
 module load java
@@ -54,7 +54,7 @@ samtools view -F4 -q 1 -m 30 -bh {filename}-mt-rg.bam | samtools sort > {filenam
 
 samtools view -q 30 -bh {filename}-mt-q1-rmdup.bam > {filename}-mt-q30-rmdup.bam
 samtools index {filename}-mt-q30-rmdup.bam
-mapDamage -i {filename}-mt-q30-rmdup.bam -r /lisc/user/cheshmedzhieva/REF/rCRS.fa -t {filename}-mt
+mapDamage -i {filename}-mt-q30-rmdup.bam -r your_path/rCRS.fa -t {filename}-mt
 
 
 # 4) Time to check contamination
@@ -63,8 +63,8 @@ module purge
 module load samtools
 module load module load authentict/1.0.1-3.13.1
 
-samtools view /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326868/326868_S43_R1_001-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_1_check -s 10000 -
-samtools view /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326869/326869_S44_R1_001-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_2_check -s 10000 -
+samtools view path_to_STS1.1/STS1_1-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_1_check -s 10000 -
+samtools view path_to_STS1_2/STS1_2-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_2_check -s 10000 -
 
 # 5) PMD filtering and another contamination check
 ### NOTE -> original PMDtools is written in Python2, here we use a self-updated Python3 version
@@ -75,10 +75,10 @@ module load samtools
 module load module load authentict/1.0.1-3.13.1
 souce /lisc/user/cheshmedzhieva/myenv/bin/activate
 
-samtools view -h /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326868/326868_S43_R1_001-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 1 --header | samtools view -Sb - > STS1_1_PMD_thr1.bam
-samtools view -h /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326869/326869_S44_R1_001-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 1 --header | samtools view -Sb - > STS1_2_PMD_thr1.bam
-samtools view ../PMD/STS1_1_PMD_thr1.bam | AuthentiCT deam2cont -o sts1_1_pmd_check -s 10000 -
-samtools view ../PMD/STS1_2_PMD_thr1.bam | AuthentiCT deam2cont -o sts1_2_pmd_check -s 10000 -
+samtools view -h path_to_STS1.1/STS1_1-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 1 --header | samtools view -Sb - > STS1_1_PMD_thr1.bam
+samtools view -h path_to_STS1_2/STS1_2-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 1 --header | samtools view -Sb - > STS1_2_PMD_thr1.bam
+samtools view STS1_1_PMD_thr1.bam | AuthentiCT deam2cont -o sts1_1_pmd_check -s 10000 -
+samtools view STS1_2_PMD_thr1.bam | AuthentiCT deam2cont -o sts1_2_pmd_check -s 10000 -
 
 # 6) Merging libraries and plotting the coverage
 
@@ -91,6 +91,7 @@ samtools addreplacerg -r 'ID:Starosele\tSM:Starosele\tLB:Starosele\tPL:Illumina'
 samtools merge -p -c -@ 8 -o - STS1_1_PMD_thr1_fixed_rg.bam STS1_2_PMD_thr1_fixed_rg.bam | samtools sort -@ 8 --write-index -o STS_merged.bam
 
 #### HERE you need the output of MapDamage - misincorporation.txt
+### HAVE IN MIND you need pysamstats
 
 python3 aDNA-BAMPlotter.py -b STS_merged.bam -d misincorporation.txt -o STS_merged.pdf
 
@@ -110,4 +111,8 @@ python3 aDNA-BAMPlotter.py -b STS_merged.bam -d misincorporation.txt -o STS_merg
 
 # You can do it with
 
-rotate -s ATGTTCGCCGACCGTTGACTATTCTCTACA  -m 3  MSA_input_before_rotate.fasta > MSA_input.fasta
+rotate -s ATGTTCGCCGACCGTTGACTATTCTCTACA  -m 3  MSA_input_before_rotate.fasta > MSA_input_rotated.fasta
+
+# 9) From here onwards the MSA and the phylogeny tree are processed as described in the article, not on the command line.
+
+# 10) Plotting the IQtree with ggtree
