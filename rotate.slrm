@@ -1,1 +1,0 @@
-/lisc/scratch/admixlab/ina/rotate/rotate -s ATGTTCGCCGACCGTTGACTATTCTCTACA  -m 3  MAFFT_input_exp_pmd3.fasta > MAFFT_input_exp_pmd3_rotated.fasta
