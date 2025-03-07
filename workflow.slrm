@@ -1,0 +1,113 @@
+#!/bin/bash
+#SBATCH --mail-user=konstantina.cheshmedzhieva@univie.ac.at
+#SBATCH --job-name=STS
+#SBATCH --output=log/%x-%A_%a.out
+#SBATCH --error=log/%x-%A_%a.err
+#SBATCH --mem=150GB
+#SBATCH --cpus-per-task=16
+#SBATCH --time=7-00:00:00
+
+FASTQ_DIR="{FASTQ_DIR}"
+OUTPUT_DIR="{OUTPUT_DIR}"
+sampleid="{directory}"
+
+module load conda
+module load samtools
+module load bwa
+module load gatk/4.6.0.0
+module unload java
+module load qualimap
+module load seqtk
+conda activate mapdamage2-2.2.2
+conda deactivate
+conda activate mapdamage2-2.2.2
+
+#) Make a directory just for this sample
+cd $OUTPUT_DIR
+mkdir {directory}
+cd {directory}/
+
+# 1) Adapter trimming and read length filtering
+
+/lisc/user/cheshmedzhieva/leeHom/src/leeHom -f AGATCGGAAGAGCACACGTCTGAACTCCAGTCA --ancientdna -fqo primary-trimmed -fq1 $FASTQ_DIR/$sampleid/{filename}.fastq.gz
+
+seqtk seq -L 30 primary-trimmed.fq.gz | gzip > {filename}-trimmed.fq.gz
+
+# 2) Mapping Mitochondrial
+bwa aln -t 12 -l 16500 -n 0.01 -o 2 -q 0 /lisc/user/cheshmedzhieva/REF/rCRS.fa {filename}-trimmed.fq.gz | bwa samse -r '@RG\tID:{filename}-mt\tLB:{filename}-mt\tPL:Illumina\tPU:1\tSM:{filename}-mt' /lisc/user/cheshmedzhieva/REF/rCRS.fa - {filename}-trimmed.fq.gz \
+| samtools view -Sbh - > {filename}-mt-rg.bam
+module unload java
+module load java
+
+# 3) Remove Duplicates Mitochondrial
+samtools view -F4 -q 1 -m 30 -bh {filename}-mt-rg.bam | samtools sort > {filename}-mt-q1.bam
+
+/lisc/app/gatk/4.6.0.0/gatk MarkDuplicates \
+    --INPUT {filename}-mt-q1.bam \
+    --OUTPUT {filename}-mt-q1-rmdup.bam \
+    --REMOVE_DUPLICATES true \
+    --METRICS_FILE metrics_mt.txt \
+    --VALIDATION_STRINGENCY SILENT
+
+/lisc/app/gatk/4.6.0.0/gatk BuildBamIndex \
+    --INPUT {filename}-mt-q1-rmdup.bam \
+
+samtools view -q 30 -bh {filename}-mt-q1-rmdup.bam > {filename}-mt-q30-rmdup.bam
+samtools index {filename}-mt-q30-rmdup.bam
+mapDamage -i {filename}-mt-q30-rmdup.bam -r /lisc/user/cheshmedzhieva/REF/rCRS.fa -t {filename}-mt
+
+
+# 4) Time to check contamination
+
+module purge
+module load samtools
+module load module load authentict/1.0.1-3.13.1
+
+samtools view /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326868/326868_S43_R1_001-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_1_check -s 10000 -
+samtools view /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326869/326869_S44_R1_001-mt-q30-rmdup.bam | AuthentiCT deam2cont -o sts1_2_check -s 10000 -
+
+# 5) PMD filtering and another contamination check
+### NOTE -> original PMDtools is written in Python2, here we use a self-updated Python3 version
+### BUT you can always do it online :)
+
+module purge
+module load samtools
+module load module load authentict/1.0.1-3.13.1
+souce /lisc/user/cheshmedzhieva/myenv/bin/activate
+
+samtools view -h /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326868/326868_S43_R1_001-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 1 --header | samtools view -Sb - > STS1_1_PMD_thr1.bam
+samtools view -h /lisc/scratch/admixlab/ina/December_Papuans_plus_Starosele_mt_capture_processed/326869/326869_S44_R1_001-mt-q30-rmdup.bam | python3 ../../PMDtools3/pmdtools.0.60.py --threshold 1 --header | samtools view -Sb - > STS1_2_PMD_thr1.bam
+samtools view ../PMD/STS1_1_PMD_thr1.bam | AuthentiCT deam2cont -o sts1_1_pmd_check -s 10000 -
+samtools view ../PMD/STS1_2_PMD_thr1.bam | AuthentiCT deam2cont -o sts1_2_pmd_check -s 10000 -
+
+# 6) Merging libraries and plotting the coverage
+
+module purge
+module load samtools
+#first fix the read groups so that they are the same and you can merge the bams
+samtools addreplacerg -r 'ID:Starosele\tSM:Starosele\tLB:Starosele\tPL:Illumina' -m overwrite_all -o STS1_1_PMD_thr1_fixed_rg.bam ../PMD/STS1_1_PMD_thr1.bam
+samtools addreplacerg -r 'ID:Starosele\tSM:Starosele\tLB:Starosele\tPL:Illumina' -m overwrite_all -o STS1_2_PMD_thr1_fixed_rg.bam ../PMD/STS1_2_PMD_thr1.bam
+#then the merge itself
+samtools merge -p -c -@ 8 -o - STS1_1_PMD_thr1_fixed_rg.bam STS1_2_PMD_thr1_fixed_rg.bam | samtools sort -@ 8 --write-index -o STS_merged.bam
+
+#### HERE you need the output of MapDamage - misincorporation.txt
+
+python3 aDNA-BAMPlotter.py -b STS_merged.bam -d misincorporation.txt -o STS_merged.pdf
+
+# 7) Time for the consensus sequence
+
+ module purge
+ module load angsd
+
+ angsd -i STS_merged.bam -doFasta 2 -doCounts 1 -basesPerLine 70 -seed 5 -out STS_consensus
+
+ # 8) Time to construct a file to go to the MSA
+### HERE you have some manual work
+### Get your fasta file and give it a name
+### Then add some other mitochondrial sequences in fasta format
+### Then because not all mitochondrial sequences start from the same position
+### ideally you use a conserved region sequence to align them 
+
+# You can do it with
+
+rotate -s ATGTTCGCCGACCGTTGACTATTCTCTACA  -m 3  MSA_input_before_rotate.fasta > MSA_input.fasta
