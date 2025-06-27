@@ -1,4 +1,4 @@
-"This repository contains the code used to process the mitochondrial capture data done on a Neanderthal sample from the Starosel'e archeological site in Crimea, Ukraine."
+"This repository contains the code used to process the mitochondrial capture data done on a Neanderthal from the Starosele archeological site in Crimea, Ukraine."
 "The sample is composed of two sub-samples - STS1.1 and STS1.2. The difference between these two samples is a pre-treatment step applied in the DNA extraction protocol."
 "Further, we have applied target enrichment using Arbor Bioscience myBaits mito expert kit and sequenced them at the VBCF".
 
